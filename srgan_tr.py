@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
-
+import argparse as arg
+import sys
 import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -15,10 +15,10 @@ import matplotlib.pyplot as plt
 
 # Super-resolution Image Generator
 class Generator(tf.keras.Model):
-    def __init__(self):
+    def __init__(self, input_shape):
         super().__init__()
 
-        input_shape = (128, 128, 3)
+        input_shape_ps = (input_shape[0], input_shape[1], 64) 
 
         # Pre stage(Down Sampling)
         self.pre = [
@@ -30,7 +30,7 @@ class Generator(tf.keras.Model):
         # Residual Block
         self.res = [
             [
-                Res_block(64) for _ in range(7)
+                Res_block(64, input_shape) for _ in range(7)
             ]
         ]
 
@@ -43,12 +43,11 @@ class Generator(tf.keras.Model):
         # Pixel Shuffle(Up Sampling)
         self.ps =[
             [
-                Pixel_shuffer(128) for _ in range(2)
+                Pixel_shuffer(128, input_shape_ps) for _ in range(2)
             ],
             kl.Conv2D(3, kernel_size=9, strides=4, padding="same", activation="tanh")
         ]
 
-    # forward proc
     def call(self, x):
 
         # Pre stage
@@ -79,14 +78,10 @@ class Generator(tf.keras.Model):
 
         return out
 
-
 # Discriminator 
 class Discriminator(tf.keras.Model):
-    def __init__(self):
+    def __init__(self, input_shape):
         super().__init__()
-
-        input_shape = (128, 128, 3)
-
 
         self.conv1 = kl.Conv2D(64, kernel_size=3, strides=1,
                             padding="same", input_shape=input_shape)
@@ -132,7 +127,6 @@ class Discriminator(tf.keras.Model):
         self.dens1 = kl.Dense(1024, activation=kl.LeakyReLU())
         self.dens2 = kl.Dense(1, activation="sigmoid")
 
-    # forward proc
     def call(self, x):
 
         d1 = self.act1(self.conv1(x))
@@ -151,10 +145,8 @@ class Discriminator(tf.keras.Model):
 
 # Pixel Shuffle
 class Pixel_shuffer(tf.keras.Model):
-    def __init__(self, out_ch):
+    def __init__(self, out_ch, input_shape):
         super().__init__()
-
-        input_shape = (128, 128, 64)
 
         self.conv = kl.Conv2D(out_ch, kernel_size=3, strides=1,
                             padding="same", input_shape=input_shape)
@@ -170,11 +162,9 @@ class Pixel_shuffer(tf.keras.Model):
 
 # Residual Block
 class Res_block(tf.keras.Model):
-    def __init__(self, ch):
+    def __init__(self, ch, input_shape):
         super().__init__()
 
-        input_shape = (128, 128, 3)
-        
         self.conv1 = kl.Conv2D(ch, kernel_size=3, strides=1,
                             padding="same", input_shape=input_shape)
         self.bn1 = kl.BatchNormalization()
@@ -184,20 +174,21 @@ class Res_block(tf.keras.Model):
                             padding="same")
         self.bn2 = kl.BatchNormalization()
 
-    # forward proc
+        self.add = kl.Add()
+
     def call(self, x):
 
         d1 = self.av1(self.bn1(self.conv1(x)))
         d2 = self.bn2(self.conv2(d1))
 
-        return x + d2
+        return self.add([x, d2])
 
 # Train
 class trainer():
-    def __init__(self):
+    def __init__(self, lr_img, hr_img):
 
-        lr_shape = (128, 128, 3)
-        hr_shape = (128, 128, 3)
+        lr_shape = lr_img.shape
+        hr_shape = hr_img.shape
 
         # Content Loss Model setup
         input_tensor = tf.keras.Input(shape=hr_shape)
@@ -209,7 +200,7 @@ class trainer():
         self.cl_model = tf.keras.Model(input_tensor, self.vgg.outputs)
 
         # Discriminator
-        discriminator_ = Discriminator()
+        discriminator_ = Discriminator(hr_shape)
         inputs = tf.keras.Input(shape=hr_shape)
         outputs = discriminator_(inputs)
         self.discriminator = tf.keras.Model(inputs=inputs, outputs=outputs)
@@ -218,10 +209,9 @@ class trainer():
                                 metrics=['accuracy'])
 
         # Generator
-        self.generator = Generator()
-                   
+        self.generator = Generator(lr_shape)
+        
         # Combined Model setup
-        hr_input = tf.keras.Input(shape=hr_shape)
         lr_input = tf.keras.Input(shape=lr_shape)
         sr_output = self.generator(lr_input)
 
@@ -233,23 +223,26 @@ class trainer():
                         loss=[self.Content_loss, tf.keras.losses.BinaryCrossentropy()],
                         loss_weights=[1., 1e-3])
         
-  
+    # Content loss
     def Content_loss(self, hr_img, sr_img):
         return K.mean(K.abs(K.square(self.cl_model(hr_img) - self.cl_model(sr_img))))
 
-    def psnr(self, sr_img, hr_img):
-        
-        return cv2.PSNR(sr_img, hr_img)
+    # PSNR
+    def psnr(self, hr_img, sr_img):
+        return cv2.PSNR(hr_img, sr_img)
         
     def train(self, lr_imgs, hr_imgs, out_path, batch_size, epoch):
+
+        g_loss_plt = []
+        d_loss_plt = []
+        path = os.path.join(out_path, "graph.jpg")
 
         h_batch = int(batch_size / 2)
 
         real_lab = np.ones((h_batch, 1))  # High-resolution image label
         fake_lab = np.zeros((h_batch, 1)) # Super-resolution image label(Discriminator side)
         gan_lab = np.ones((h_batch, 1))
-        
-        
+
         # train run
         for epoch in range(epoch):
 
@@ -271,12 +264,10 @@ class trainer():
             # train by Super-resolution image
             sr_img = self.generator.predict(lr_img) 
             d_fake_loss = self.discriminator.train_on_batch(sr_img, fake_lab)
-            d_fake = self.discriminator.predict(sr_img)
             
             # Discriminator average loss 
             d_loss = 0.5 * np.add(d_real_loss, d_fake_loss)
             
-
             # - Train Generator -
 
             # High-resolution image random pickups
@@ -286,18 +277,42 @@ class trainer():
             # Low-resolution image random pickups
             lr_img = lr_imgs[idx]
 
-
+            # train by Generator
             self.discriminator.trainable = False
-
             g_loss = self.gan.train_on_batch(lr_img, [hr_img, gan_lab])
 
-            # Epoch num
-            print("Epoch: {} D_loss: {} G_loss: {} PSNR: {}".format(epoch+1, d_loss, g_loss, self.psnr(sr_img, hr_img)))
+            # Epoch num, Discriminator/Generator loss, PSNR
+            print("Epoch: {0} D_loss: {1:.3f} G_loss: {2:.3f} PSNR: {3:.3f}".format(epoch+1, d_loss[0], g_loss[0], self.psnr(hr_img, sr_img)))
 
-        # Parameter-File Saving
-        self.generator.save_weights(out_path)
+            d_loss_plt.append(d_loss[0])
+            g_loss_plt.append(g_loss[0])
 
+            # Plotting the loss value
+            if epoch+1 % 50 == 0:
+                plt.plot(d_loss_plt)
+                plt.plot(g_loss_plt)
+                plt.show()
+                plt.savefig(path)
+
+        print("___Training finished\n\n")
+
+        # Parameter-File and Graph Saving
+        print("___Saving parameter...")
+        self.generator.save_weights(os.path.join(out_path, "srgan.h5"))
+        plt.plot(d_loss_plt)
+        plt.plot(g_loss_plt)
+        plt.savefig(path)
+        print("___Successfully completed\n\n")
+
+# Dataset creation
 def create_dataset(data_dir, h, w, mag):
+
+    print("\n___Creating a dataset...")
+    
+    prc = ['/', '-', '\\', '|']
+    cnt = 0
+
+    print("Number of image in a directory: {}".format(len(os.listdir(data_dir))))
 
     lr_imgs = []
     hr_imgs = []
@@ -306,45 +321,54 @@ def create_dataset(data_dir, h, w, mag):
         d = os.path.join(data_dir, c)
 
         _, ext = os.path.splitext(c)
-        if ext.lower() != '.bmp':
+        if ext.lower() != ('.bmp' or '.png' or '.jpg'):
             continue
 
         img = cv2.imread(d)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img = cv2.resize(img, (h, w))
+        img = cv2.resize(img, (h, w)) # High-resolution image
 
-        img_low = cv2.resize(img, (int(h/mag), int(w/mag)))
-        img_low = cv2.resize(img_low, (h, w))
+        img_low = cv2.resize(img, (int(h/mag), int(w/mag))) # Image reduction
+        img_low = cv2.resize(img_low, (h, w)) # Resize to original size
 
         lr_imgs.append(img_low)
         hr_imgs.append(img)
 
+        cnt += 1
+
+        print("\rLoading a LR-images and HR-images...{}    ({} / {})".format(prc[cnt%4], cnt, len(os.listdir(data_dir))), end='')
+
+    print("\rLoading a LR-images and HR-images...Done    ({} / {})".format(cnt, len(os.listdir(data_dir))), end='')
+
+    # Low-resolution image
     lr_imgs = tf.convert_to_tensor(lr_imgs, np.float32) 
     lr_imgs = (lr_imgs.numpy() - 127.5) / 127.5
- 
 
+    # High-resolution image
     hr_imgs = tf.convert_to_tensor(hr_imgs, np.float32)
-    hr_imgs = (hr_imgs.numpy() - 127.5) / 127.55
+    hr_imgs = (hr_imgs.numpy() - 127.5) / 127.5
     
+    print("\n___Successfully completed\n")
+
     return lr_imgs, hr_imgs
 
 def main():
 
-    # プログラム情報
+    # Program info
     print("Super-resolution GAN training ver.3")
     print("Last update date:    2020/05/11\n")
     
-    # コマンドラインオプション作成
+    # Command line option
     parser = arg.ArgumentParser(description='Super-resolution GAN training')
     parser.add_argument('--data_dir', '-d', type=str, default=None,
                         help='画像フォルダパスの指定(未指定ならエラー)')
     parser.add_argument('--out', '-o', type=str,
                         default=os.path.dirname(os.path.abspath(__file__)),
-                        help='パラメータの保存先指定(デフォルト値=./srcnn.h5')
+                        help='パラメータの保存先指定(デフォルト値=./srgan.h5')
     parser.add_argument('--batch_size', '-b', type=int, default=32,
                         help='ミニバッチサイズの指定(デフォルト値=32)')
-    parser.add_argument('--epoch', '-e', type=int, default=3000,
-                        help='学習回数の指定(デフォルト値=3000)')
+    parser.add_argument('--epoch', '-e', type=int, default=1000,
+                        help='学習回数の指定(デフォルト値=1000)')
     parser.add_argument('--he', '-he', type=int, default=128,
                         help='リサイズの高さ指定(デフォルト値=128)')      
     parser.add_argument('--wi', '-wi', type=int, default=128,
@@ -353,35 +377,40 @@ def main():
                         help='縮小倍率の指定(デフォルト値=2)')                           
     args = parser.parse_args()
 
-    # 画像フォルダパス未指定->例外
+    # Image folder unspecified. -> Exception
     if args.data_dir == None:
         print("\nException: Folder not specified.\n")
         sys.exit()
-    # 存在しない画像フォルダ指定時->例外
+    # Nonexistent image folder unspecified. -> Exception
     if os.path.exists(args.data_dir) != True:
         print("\nException: Folder \"{}\" is not found.\n".format(args.data_dir))
         sys.exit()
+    # When 0 is entered for either width/height or Reduction ratio. -> Exception
+    if args.he == 0 or args.wi == 0 or args.mag == 0:
+        print("\nException: Invalid value has been entered.\n")
+        sys.exit()
 
-    # 出力フォルダの作成(フォルダが存在する場合は作成しない)
+    # Create output folder (If the folder exists, it will not be created.)
     os.makedirs(args.out, exist_ok=True)
-    out_path = os.path.join(args.out, "srgan.h5")
 
-    # 設定情報出力
+    # Setting info
     print("=== Setting information ===")
     print("# Images folder: {}".format(os.path.abspath(args.data_dir)))
-    print("# Output folder: {}".format(out_path))
+    print("# Output folder: {}".format(args.out))
     print("# Minibatch-size: {}".format(args.batch_size))
     print("# Epoch: {}".format(args.epoch))
     print("")
     print("# Height: {}".format(args.he))
     print("# Width: {}".format(args.wi))
     print("# Magnification: {}".format(args.mag))
-    print("===========================\n")
+    print("===========================")
 
-    lr_imgs, hr_imgs = create_dataset(data_dir, args.he. args.wi, args.mag)
-
-    Trainer = trainer()
-    Trainer.train(lr_imgs, hr_imgs, out_path=out_path, batch_size=batch_size, epoch=epoch)
+    # dataset creation
+    lr_imgs, hr_imgs = create_dataset(args.data_dir, args.he, args.wi, args.mag)
+    
+    print("___Start training...")
+    Trainer = trainer(lr_imgs[0], hr_imgs[0])
+    Trainer.train(lr_imgs, hr_imgs, out_path=args.out, batch_size=args.batch_size, epoch=args.epoch)
 
 if __name__ == '__main__':
     main()
