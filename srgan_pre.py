@@ -43,7 +43,7 @@ class Generator(tf.keras.Model):
         # Pixel Shuffle(Up Sampling)
         self.ps =[
             [
-                Pixel_shuffer(128, input_shape_ps) for _ in range(2)
+                Pixel_shuffler(128, input_shape_ps) for _ in range(2)
             ],
             kl.Conv2D(3, kernel_size=9, strides=4, padding="same", activation="tanh")
         ]
@@ -79,7 +79,7 @@ class Generator(tf.keras.Model):
         return out
 
 # Pixel Shuffle
-class Pixel_shuffer(tf.keras.Model):
+class Pixel_shuffler(tf.keras.Model):
     def __init__(self, out_ch, input_shape):
         super().__init__()
 
