@@ -354,10 +354,6 @@ def create_dataset(data_dir, h, w, mag):
 
 def main():
 
-    # Program info
-    print("Super-resolution GAN training ver.3")
-    print("Last update date:    2020/05/11\n")
-    
     # Command line option
     parser = arg.ArgumentParser(description='Super-resolution GAN training')
     parser.add_argument('--data_dir', '-d', type=str, default=None,
