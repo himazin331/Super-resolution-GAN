@@ -373,11 +373,11 @@ def main():
                         help='縮小倍率の指定(デフォルト値=2)')                           
     args = parser.parse_args()
 
-    # Image folder unspecified. -> Exception
+    # Image folder not specified. -> Exception
     if args.data_dir == None:
         print("\nException: Folder not specified.\n")
         sys.exit()
-    # Nonexistent image folder unspecified. -> Exception
+    # An image folder that does not exist was specified. -> Exception
     if os.path.exists(args.data_dir) != True:
         print("\nException: Folder \"{}\" is not found.\n".format(args.data_dir))
         sys.exit()
