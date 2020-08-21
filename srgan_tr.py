@@ -316,12 +316,11 @@ def create_dataset(data_dir, h, w, mag):
 
     lr_imgs = []
     hr_imgs = []
-
     for c in os.listdir(data_dir):
         d = os.path.join(data_dir, c)
 
         _, ext = os.path.splitext(c)
-        if ext.lower() != ('.bmp' or '.png' or '.jpg'):
+        if ext.lower() != '.jpg' or ext.lower() != '.png' or ext.lower() != '.bmp':
             continue
 
         img = cv2.imread(d)
