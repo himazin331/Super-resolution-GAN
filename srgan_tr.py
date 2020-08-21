@@ -320,7 +320,7 @@ def create_dataset(data_dir, h, w, mag):
         d = os.path.join(data_dir, c)
 
         _, ext = os.path.splitext(c)
-        if ext.lower() != '.jpg' or ext.lower() != '.png' or ext.lower() != '.bmp':
+        if ext.lower() not in ['.jpg', '.png', '.bmp']:
             continue
 
         img = cv2.imread(d)
