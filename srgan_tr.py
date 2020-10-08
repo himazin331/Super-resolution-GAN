@@ -356,20 +356,20 @@ def main():
     # Command line option
     parser = arg.ArgumentParser(description='Super-resolution GAN training')
     parser.add_argument('--data_dir', '-d', type=str, default=None,
-                        help='画像フォルダパスの指定(未指定ならエラー)')
+                        help='Specify the image folder path (If not specified, an error)')
     parser.add_argument('--out', '-o', type=str,
                         default=os.path.dirname(os.path.abspath(__file__)),
-                        help='パラメータの保存先指定(デフォルト値=./srgan.h5')
+                        help='Specify where to save parameters (default: ./srgan.h5)')
     parser.add_argument('--batch_size', '-b', type=int, default=32,
-                        help='ミニバッチサイズの指定(デフォルト値=32)')
+                        help='Specify the mini-batch size (default: 32)')
     parser.add_argument('--epoch', '-e', type=int, default=1000,
-                        help='学習回数の指定(デフォルト値=1000)')
+                        help='Specify the number of times to train (default: 1000)')
     parser.add_argument('--he', '-he', type=int, default=128,
-                        help='リサイズの高さ指定(デフォルト値=128)')      
+                        help='Resize height (default: 128)')      
     parser.add_argument('--wi', '-wi', type=int, default=128,
-                        help='リサイズの指定(デフォルト値=128)')
+                        help='Resize width (default: 128)')
     parser.add_argument('--mag', '-m', type=int, default=2,
-                        help='縮小倍率の指定(デフォルト値=2)')                           
+                        help='Reduction scale (default: 2)')                           
     args = parser.parse_args()
 
     # Image folder not specified. -> Exception
