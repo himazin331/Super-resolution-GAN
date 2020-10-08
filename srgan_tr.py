@@ -369,7 +369,7 @@ def main():
     parser.add_argument('--wi', '-wi', type=int, default=128,
                         help='Resize width (default: 128)')
     parser.add_argument('--mag', '-m', type=int, default=2,
-                        help='Reduction scale (default: 2)')                           
+                        help='Magnification (default: 2)')                           
     args = parser.parse_args()
 
     # Image folder not specified. -> Exception
