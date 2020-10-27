@@ -236,6 +236,7 @@ class trainer():
         g_loss_plt = []
         d_loss_plt = []
         path = os.path.join(out_path, "graph.jpg")
+        plt.figure(figsize=(12.8, 8.0), dpi=100)
 
         h_batch = int(batch_size / 2)
 
@@ -288,20 +289,19 @@ class trainer():
             g_loss_plt.append(g_loss[0])
 
             # Plotting the loss value
-            if epoch+1 % 50 == 0:
+            if (epoch+1) % 50 == 0:
                 plt.plot(d_loss_plt)
                 plt.plot(g_loss_plt)
-                plt.show()
-                plt.savefig(path)
+                plt.savefig(path, bbox_inches='tight', pad_inches=0.1)
 
         print("___Training finished\n\n")
 
         # Parameter-File and Graph Saving
         print("___Saving parameter...")
         self.generator.save_weights(os.path.join(out_path, "srgan.h5"))
-        plt.plot(d_loss_plt)
-        plt.plot(g_loss_plt)
-        plt.savefig(path)
+        plt.plot(d_loss_plt, label="D_loss")
+        plt.plot(g_loss_plt, label="G_loss")
+        plt.savefig(path, bbox_inches='tight', pad_inches=0.1)
         print("___Successfully completed\n\n")
 
 # Dataset creation
